@@ -26,8 +26,10 @@ body{
 .btn{appearance:none;border:0;border-radius:14px;padding:16px 22px;font-size:1.05rem;font-weight:600;cursor:pointer}
 .btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 6px 18px rgba(200,134,63,.35)}
 .btn-primary:active{transform:translateY(1px)}
-.btn-recipe{background:var(--panel);color:var(--ink);border:1px solid var(--line);width:100%}
-.btn-recipe.is-on{background:linear-gradient(180deg,#7a4e22,#5c3a19);border-color:#9a6a34}
+.recipes{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px}
+.recipe-chip{flex:0 0 auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font-size:.95rem;font-weight:600;cursor:pointer;white-space:nowrap}
+.recipe-chip.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.recipe-chip:disabled{opacity:.6;cursor:default}
 .btn:disabled{opacity:.6;cursor:default}
 
 /* 編集 */

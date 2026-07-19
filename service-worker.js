@@ -1,5 +1,5 @@
 // Analogital Pocket — オフライン対応と「ホーム画面に追加」用の最小構成
-const CACHE = 'analogital-v1';
+const CACHE = 'analogital-v2';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png'
