@@ -43,3 +43,22 @@ body{
 .busy[hidden]{display:none}
 .controls{display:flex;flex-direction:column;gap:12px;padding:16px 18px calc(20px + env(safe-area-inset-bottom))}
 .status{margin:0;min-height:1.2em;color:var(--muted);font-size:.85rem;line-height:1.5}
+
+/* 明るさスライダー */
+.slider-row{display:flex;align-items:center;gap:10px;margin-top:4px}
+.slider-label{font-size:.85rem;color:var(--muted);min-width:3em}
+.slider-row input[type=range]{flex:1;accent-color:var(--accent);height:26px}
+.btn-tiny{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:.8rem;cursor:pointer}
+
+/* 行内の2ボタン */
+.row2{display:flex;gap:10px;margin-top:10px}
+.row2 .btn-primary{flex:1}
+.btn-sub{flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:16px 18px;font-size:1rem;font-weight:600;cursor:pointer}
+
+/* トリミングの比率 */
+.ratios{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px}
+.ratio-chip{flex:0 0 auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-size:.9rem;font-weight:600;cursor:pointer}
+.ratio-chip.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* トリミング中のキャンバス */
+.preview.cropping{touch-action:none;cursor:crosshair}

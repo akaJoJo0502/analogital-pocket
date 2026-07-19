@@ -2,7 +2,7 @@
 
 /* ------------------------------------------------------------------
    Analogital Pocket
-   写真を1枚選ぶ → フィルム風レシピ（3種）を適用 → 別ファイルで保存
+   写真を選ぶ → レシピ／明るさ／トリミングを調整 → 別ファイルで保存
    ・写真は端末の外へ送らない（すべてブラウザ内で処理）
    ・元の写真は一切変更しない（非破壊。保存は必ず新しいファイル）
 ------------------------------------------------------------------ */
@@ -14,50 +14,51 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// ---- 画面の要素 ----
+// ---- 要素 ----
 const screens = { home: document.getElementById('home'), editor: document.getElementById('editor') };
 const fileInput   = document.getElementById('fileInput');
 const pickBtn     = document.getElementById('pickBtn');
 const backBtn     = document.getElementById('backBtn');
 const recipesEl   = document.getElementById('recipes');
+const exposureEl  = document.getElementById('exposure');
+const expResetEl  = document.getElementById('expReset');
+const cropBtn     = document.getElementById('cropBtn');
 const saveBtn     = document.getElementById('saveBtn');
+const normalControls = document.getElementById('normalControls');
+const cropControls   = document.getElementById('cropControls');
+const cropCancel  = document.getElementById('cropCancel');
+const cropApply   = document.getElementById('cropApply');
+const ratiosEl    = document.getElementById('ratios');
 const statusEl    = document.getElementById('status');
 const busyEl      = document.getElementById('busy');
 const previewCanvas = document.getElementById('preview');
 const pctx = previewCanvas.getContext('2d', { willReadFrequently: true });
 
 // ---- 状態 ----
-let sourceCanvas = null;   // 向き補正済み・フル解像度の元画像（読み取り専用の下絵）
-let currentRecipe = null;  // null = 元の写真（レシピ未適用）
+let originalCanvas = null;              // 向き補正済み・フル解像度の元画像（読み取り専用）
+let cropRect = { x: 0, y: 0, w: 0, h: 0 }; // 元画像座標での切り抜き範囲
+let exposure = 0;                       // 明るさ（-100〜+100）
+let currentRecipe = null;               // null = 元の写真
 
-/* ------------------------------------------------------------------
-   レシピ：ユーザーの「調整前→調整後」のペア写真から作った本物の色。
-   変換表のデータは recipes-data.js（window.RECIPE_DATA）に置き、
-   ここでは写真に当てはめる関数だけを持つ。
------------------------------------------------------------------- */
-// 色ごとの対応表を使うレシピ（カラー系）
+// ---- レシピ（recipes-data.js のデータから組み立て）----
 function lutRecipe(rL, gL, bL) {
   return (img) => {
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) { d[i] = rL[d[i]]; d[i + 1] = gL[d[i + 1]]; d[i + 2] = bL[d[i + 2]]; }
   };
 }
-// 明るさ（輝度）だけ残して色を抜くレシピ（モノクロ）＋色味の調整
 function monoRecipe(toneL, tR, tG, tB) {
   return (img) => {
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
-      const y = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0; // 明るさ
+      const y = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
       const v = toneL[y];
-      d[i] = v * tR; d[i + 1] = v * tG; d[i + 2] = v * tB; // Uint8ClampedArrayが自動で0〜255に丸める
+      d[i] = v * tR; d[i + 1] = v * tG; d[i + 2] = v * tB;
     }
   };
 }
-
-// recipes-data.js のデータからレシピ一覧を組み立てる
 const RECIPES = (window.RECIPE_DATA || []).map((d) => ({
-  id: d.id,
-  name: d.name,
+  id: d.id, name: d.name,
   apply: d.type === 'mono'
     ? monoRecipe(d.tone, d.tint[0], d.tint[1], d.tint[2])
     : lutRecipe(d.R, d.G, d.B),
@@ -66,20 +67,19 @@ const RECIPES = (window.RECIPE_DATA || []).map((d) => ({
 // ---- 画面切り替え ----
 function show(name) { for (const k in screens) screens[k].classList.toggle('is-active', k === name); }
 
-// ---- レシピ選択ボタン（「元の写真」＋3種）----
+// ---- レシピ選択ボタン ----
 function addChip(label, recipe) {
   const b = document.createElement('button');
   b.className = 'recipe-chip';
+  b.type = 'button';
   b.textContent = label;
   b.dataset.id = recipe ? recipe.id : 'none';
   b.addEventListener('click', () => {
-    if (!sourceCanvas) return;
+    if (!originalCanvas) return;
     currentRecipe = recipe;
     renderPreview();
     updateChips();
-    statusEl.textContent = recipe
-      ? `${recipe.name}を適用中。保存すると、この色で新しい写真ができます。`
-      : '元の色に戻しました。';
+    statusEl.textContent = recipe ? `${recipe.name} を適用中` : '元の色に戻しました。';
   });
   recipesEl.appendChild(b);
 }
@@ -94,7 +94,20 @@ function updateChips() {
   Array.from(recipesEl.children).forEach((b) => b.classList.toggle('is-on', b.dataset.id === cur));
 }
 
-// ---- 写真の読み込み（EXIFの「向き」を反映）----
+// ---- 明るさ＋レシピをまとめて当てる（1回の読み書きで高速）----
+function applyAdjustments(ctx, w, h) {
+  if (exposure === 0 && !currentRecipe) return;
+  const img = ctx.getImageData(0, 0, w, h);
+  if (exposure !== 0) {
+    const f = Math.pow(2, exposure / 100); // -100→0.5倍, +100→2倍
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) { d[i] *= f; d[i + 1] *= f; d[i + 2] *= f; }
+  }
+  if (currentRecipe) currentRecipe.apply(img);
+  ctx.putImageData(img, 0, 0);
+}
+
+// ---- 写真の読み込み（EXIFの向きを反映）----
 async function loadFile(file) {
   const isJpeg = file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name);
   if (!isJpeg) { alert('JPEGの写真を選んでください。'); return; }
@@ -103,11 +116,15 @@ async function loadFile(file) {
     const img = await decodeOriented(file);
     const w = img.width || img.naturalWidth;
     const h = img.height || img.naturalHeight;
-    sourceCanvas = document.createElement('canvas');
-    sourceCanvas.width = w; sourceCanvas.height = h;
-    sourceCanvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    originalCanvas = document.createElement('canvas');
+    originalCanvas.width = w; originalCanvas.height = h;
+    originalCanvas.getContext('2d').drawImage(img, 0, 0, w, h);
     if (img.close) img.close();
+    // 調整をリセット
+    cropRect = { x: 0, y: 0, w: w, h: h };
+    exposure = 0; exposureEl.value = 0;
     currentRecipe = null;
+    exitCropMode(true);
     setupPreview();
     renderPreview();
     updateChips();
@@ -119,7 +136,6 @@ async function loadFile(file) {
     busy(false);
   }
 }
-// EXIFの向きタグを反映して読み込む（横倒しで保存される事故を防ぐ）
 async function decodeOriented(file) {
   if ('createImageBitmap' in window) {
     try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (_) {}
@@ -133,44 +149,209 @@ async function decodeOriented(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 
-// ---- プレビュー（表示は画面サイズに縮小して軽くする）----
+// ---- プレビュー（切り抜き範囲を画面サイズに縮小して表示）----
 function setupPreview() {
   const maxW = Math.min(window.innerWidth - 32, 1000);
-  const maxH = Math.min(window.innerHeight * 0.55, 1400);
-  const sw = sourceCanvas.width, sh = sourceCanvas.height;
+  const maxH = Math.min(window.innerHeight * 0.52, 1400);
+  const sw = cropRect.w, sh = cropRect.h;
   const scale = Math.min(maxW / sw, maxH / sh, 1);
   previewCanvas.width = Math.max(1, Math.round(sw * scale));
   previewCanvas.height = Math.max(1, Math.round(sh * scale));
 }
 function renderPreview() {
-  pctx.drawImage(sourceCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
-  if (currentRecipe) {
-    const img = pctx.getImageData(0, 0, previewCanvas.width, previewCanvas.height);
-    currentRecipe.apply(img);
-    pctx.putImageData(img, 0, 0);
-  }
+  const W = previewCanvas.width, H = previewCanvas.height;
+  pctx.clearRect(0, 0, W, H);
+  pctx.drawImage(originalCanvas, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, W, H);
+  applyAdjustments(pctx, W, H);
 }
 
-// ---- 保存（フル解像度で書き出し。元画像は変更しない＝非破壊）----
+// ---- 明るさスライダー ----
+exposureEl.addEventListener('input', () => {
+  if (!originalCanvas || cropMode) return;
+  exposure = Number(exposureEl.value);
+  renderPreview();
+});
+expResetEl.addEventListener('click', () => {
+  exposure = 0; exposureEl.value = 0;
+  if (originalCanvas && !cropMode) renderPreview();
+});
+
+/* ==================================================================
+   トリミング（切り抜き）
+   ・crop中は previewCanvas に元画像全体＋切り抜き枠を描画
+   ・枠内ドラッグで移動、四隅ハンドルでサイズ変更、比率ロック対応
+================================================================== */
+let cropMode = false;
+let cropScale = 1;            // 表示座標 × cropScale = 元画像座標
+let cropRatio = 'free';       // 'free' または 幅/高 の数値
+let box = { x: 0, y: 0, w: 0, h: 0 }; // 表示座標での枠
+let drag = null;
+
+function enterCropMode() {
+  if (!originalCanvas) return;
+  cropMode = true;
+  previewCanvas.classList.add('cropping');
+  // 元画像全体を表示できるサイズに
+  const maxW = Math.min(window.innerWidth - 32, 1000);
+  const maxH = Math.min(window.innerHeight * 0.5, 1400);
+  const s = Math.min(maxW / originalCanvas.width, maxH / originalCanvas.height, 1);
+  previewCanvas.width = Math.max(1, Math.round(originalCanvas.width * s));
+  previewCanvas.height = Math.max(1, Math.round(originalCanvas.height * s));
+  cropScale = originalCanvas.width / previewCanvas.width;
+  // 現在のcropRect（元座標）を表示座標の枠に
+  box = { x: cropRect.x / cropScale, y: cropRect.y / cropScale, w: cropRect.w / cropScale, h: cropRect.h / cropScale };
+  normalControls.hidden = true;
+  cropControls.hidden = false;
+  statusEl.textContent = '枠を動かして範囲を決め、「適用」を押してください。';
+  drawCrop();
+}
+function exitCropMode(silent) {
+  cropMode = false;
+  drag = null;
+  previewCanvas.classList.remove('cropping');
+  normalControls.hidden = false;
+  cropControls.hidden = true;
+  if (!silent) { setupPreview(); renderPreview(); statusEl.textContent = ''; }
+}
+function drawCrop() {
+  const W = previewCanvas.width, H = previewCanvas.height;
+  pctx.clearRect(0, 0, W, H);
+  pctx.drawImage(originalCanvas, 0, 0, W, H);
+  // 枠外を暗くする
+  pctx.save();
+  pctx.fillStyle = 'rgba(0,0,0,.5)';
+  pctx.beginPath();
+  pctx.rect(0, 0, W, H);
+  pctx.rect(box.x, box.y, box.w, box.h);
+  pctx.fill('evenodd');
+  pctx.restore();
+  // 枠線＋三分割ガイド
+  pctx.strokeStyle = 'rgba(255,255,255,.95)';
+  pctx.lineWidth = 2;
+  pctx.strokeRect(box.x, box.y, box.w, box.h);
+  pctx.lineWidth = 1;
+  pctx.strokeStyle = 'rgba(255,255,255,.4)';
+  for (let i = 1; i < 3; i++) {
+    pctx.beginPath(); pctx.moveTo(box.x + box.w * i / 3, box.y); pctx.lineTo(box.x + box.w * i / 3, box.y + box.h); pctx.stroke();
+    pctx.beginPath(); pctx.moveTo(box.x, box.y + box.h * i / 3); pctx.lineTo(box.x + box.w, box.y + box.h * i / 3); pctx.stroke();
+  }
+  // 四隅ハンドル
+  pctx.fillStyle = '#fff';
+  const hs = 7;
+  [[box.x, box.y], [box.x + box.w, box.y], [box.x, box.y + box.h], [box.x + box.w, box.y + box.h]]
+    .forEach(([cx, cy]) => pctx.fillRect(cx - hs, cy - hs, hs * 2, hs * 2));
+}
+function toCanvas(e) {
+  const r = previewCanvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (previewCanvas.width / r.width), y: (e.clientY - r.top) * (previewCanvas.height / r.height) };
+}
+function hitTest(x, y) {
+  const hs = 16;
+  const c = { tl: [box.x, box.y], tr: [box.x + box.w, box.y], bl: [box.x, box.y + box.h], br: [box.x + box.w, box.y + box.h] };
+  for (const k in c) { if (Math.abs(x - c[k][0]) <= hs && Math.abs(y - c[k][1]) <= hs) return k; }
+  if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) return 'move';
+  return null;
+}
+function moveBox(dx, dy) {
+  const W = previewCanvas.width, H = previewCanvas.height;
+  box.x = Math.max(0, Math.min(box.x + dx, W - box.w));
+  box.y = Math.max(0, Math.min(box.y + dy, H - box.h));
+}
+function resizeBox(type, px, py) {
+  const W = previewCanvas.width, H = previewCanvas.height, MIN = 30;
+  let fx, fy;
+  if (type === 'br') { fx = box.x; fy = box.y; }
+  else if (type === 'tl') { fx = box.x + box.w; fy = box.y + box.h; }
+  else if (type === 'tr') { fx = box.x; fy = box.y + box.h; }
+  else { fx = box.x + box.w; fy = box.y; } // bl
+  px = Math.max(0, Math.min(W, px)); py = Math.max(0, Math.min(H, py));
+  const dirX = px >= fx ? 1 : -1, dirY = py >= fy ? 1 : -1;
+  let w = Math.abs(px - fx), h = Math.abs(py - fy);
+  const availW = dirX > 0 ? W - fx : fx, availH = dirY > 0 ? H - fy : fy;
+  if (cropRatio !== 'free') {
+    const r = cropRatio;
+    if (w / h > r) h = w / r; else w = h * r;
+    if (w > availW) { w = availW; h = w / r; }
+    if (h > availH) { h = availH; w = h * r; }
+  } else {
+    w = Math.min(w, availW); h = Math.min(h, availH);
+  }
+  w = Math.max(MIN, w); h = Math.max(MIN, h);
+  box.x = dirX > 0 ? fx : fx - w;
+  box.y = dirY > 0 ? fy : fy - h;
+  box.w = w; box.h = h;
+  box.x = Math.max(0, Math.min(box.x, W - box.w));
+  box.y = Math.max(0, Math.min(box.y, H - box.h));
+}
+function setRatio(rStr) {
+  cropRatio = rStr === 'free' ? 'free' : (() => { const [a, b] = rStr.split(':').map(Number); return a / b; })();
+  Array.from(ratiosEl.children).forEach((b) => b.classList.toggle('is-on', b.dataset.ratio === rStr));
+  if (cropRatio !== 'free' && originalCanvas) {
+    const W = previewCanvas.width, H = previewCanvas.height;
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    let w = box.w, h = w / cropRatio;
+    if (h > box.h) { h = box.h; w = h * cropRatio; }
+    if (w > W) { w = W; h = w / cropRatio; }
+    if (h > H) { h = H; w = h * cropRatio; }
+    box.w = w; box.h = h;
+    box.x = Math.max(0, Math.min(cx - w / 2, W - w));
+    box.y = Math.max(0, Math.min(cy - h / 2, H - h));
+    drawCrop();
+  }
+}
+previewCanvas.addEventListener('pointerdown', (e) => {
+  if (!cropMode) return;
+  const p = toCanvas(e); const t = hitTest(p.x, p.y);
+  if (!t) return;
+  previewCanvas.setPointerCapture(e.pointerId);
+  drag = { type: t, lastX: p.x, lastY: p.y };
+  e.preventDefault();
+});
+previewCanvas.addEventListener('pointermove', (e) => {
+  if (!cropMode || !drag) return;
+  const p = toCanvas(e);
+  if (drag.type === 'move') { moveBox(p.x - drag.lastX, p.y - drag.lastY); drag.lastX = p.x; drag.lastY = p.y; }
+  else { resizeBox(drag.type, p.x, p.y); }
+  drawCrop();
+  e.preventDefault();
+});
+previewCanvas.addEventListener('pointerup', () => { drag = null; });
+previewCanvas.addEventListener('pointercancel', () => { drag = null; });
+
+cropBtn.addEventListener('click', enterCropMode);
+cropCancel.addEventListener('click', () => exitCropMode(false));
+cropApply.addEventListener('click', () => {
+  // 表示座標 → 元画像座標
+  let x = Math.round(box.x * cropScale), y = Math.round(box.y * cropScale);
+  let w = Math.round(box.w * cropScale), h = Math.round(box.h * cropScale);
+  x = Math.max(0, Math.min(x, originalCanvas.width - 1));
+  y = Math.max(0, Math.min(y, originalCanvas.height - 1));
+  w = Math.max(1, Math.min(w, originalCanvas.width - x));
+  h = Math.max(1, Math.min(h, originalCanvas.height - y));
+  cropRect = { x, y, w, h };
+  exitCropMode(false);
+});
+ratiosEl.addEventListener('click', (e) => {
+  const b = e.target.closest('.ratio-chip'); if (!b) return;
+  setRatio(b.dataset.ratio);
+});
+
+// ---- 保存（フル解像度で書き出し。元画像は非破壊）----
 saveBtn.addEventListener('click', async () => {
-  if (!sourceCanvas) return;
+  if (!originalCanvas) return;
   busy(true);
   statusEl.textContent = '保存用に書き出しています…';
   try {
     const out = document.createElement('canvas');
-    out.width = sourceCanvas.width; out.height = sourceCanvas.height;
+    out.width = cropRect.w; out.height = cropRect.h;
     const octx = out.getContext('2d', { willReadFrequently: true });
-    octx.drawImage(sourceCanvas, 0, 0);
-    if (currentRecipe) {
-      const img = octx.getImageData(0, 0, out.width, out.height);
-      currentRecipe.apply(img);
-      octx.putImageData(img, 0, 0);
-    }
+    octx.drawImage(originalCanvas, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, cropRect.w, cropRect.h);
+    applyAdjustments(octx, cropRect.w, cropRect.h);
     const blob = await new Promise((res) => out.toBlob(res, 'image/jpeg', 0.92));
     if (!blob) throw new Error('toBlob returned null');
     const fname = `analogital_${stamp()}.jpg`;
     downloadBlob(blob, fname);
-    statusEl.textContent = `保存しました：${fname}（ダウンロード先に新しいファイルとして入ります）`;
+    statusEl.textContent = `保存しました：${fname}`;
   } catch (e) {
     statusEl.textContent = '保存に失敗しました。もう一度お試しください。';
   } finally {
@@ -193,16 +374,15 @@ function stamp() {
 function busy(on) {
   busyEl.hidden = !on;
   saveBtn.disabled = on;
-  Array.from(recipesEl.children).forEach((b) => { b.disabled = on; });
 }
 
 // ---- イベント ----
 pickBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) loadFile(f); fileInput.value = ''; });
-backBtn.addEventListener('click', () => { show('home'); sourceCanvas = null; });
+backBtn.addEventListener('click', () => { if (cropMode) { exitCropMode(false); return; } show('home'); originalCanvas = null; });
 let resizeTimer;
 window.addEventListener('resize', () => {
-  if (!sourceCanvas || !screens.editor.classList.contains('is-active')) return;
+  if (!originalCanvas || cropMode || !screens.editor.classList.contains('is-active')) return;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { setupPreview(); renderPreview(); }, 150);
 });

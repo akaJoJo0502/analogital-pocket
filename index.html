@@ -38,8 +38,30 @@
       <div id="busy" class="busy" hidden>処理中…</div>
     </div>
     <div class="controls">
-      <div id="recipes" class="recipes" role="group" aria-label="レシピを選ぶ"></div>
-      <button id="saveBtn" class="btn btn-primary">保存する</button>
+      <div id="normalControls">
+        <div id="recipes" class="recipes" role="group" aria-label="レシピを選ぶ"></div>
+        <label class="slider-row">
+          <span class="slider-label">明るさ</span>
+          <input id="exposure" type="range" min="-100" max="100" value="0" aria-label="明るさ">
+          <button id="expReset" class="btn-tiny" type="button">0</button>
+        </label>
+        <div class="row2">
+          <button id="cropBtn" class="btn-sub" type="button">トリミング</button>
+          <button id="saveBtn" class="btn btn-primary" type="button">保存する</button>
+        </div>
+      </div>
+      <div id="cropControls" hidden>
+        <div id="ratios" class="ratios" role="group" aria-label="比率">
+          <button class="ratio-chip is-on" data-ratio="free" type="button">自由</button>
+          <button class="ratio-chip" data-ratio="1:1" type="button">1:1</button>
+          <button class="ratio-chip" data-ratio="4:5" type="button">4:5</button>
+          <button class="ratio-chip" data-ratio="16:9" type="button">16:9</button>
+        </div>
+        <div class="row2">
+          <button id="cropCancel" class="btn-sub" type="button">キャンセル</button>
+          <button id="cropApply" class="btn btn-primary" type="button">適用</button>
+        </div>
+      </div>
       <p id="status" class="status" role="status"></p>
     </div>
   </section>
