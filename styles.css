@@ -59,6 +59,9 @@ body{
 .ratios{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px}
 .ratio-chip{flex:0 0 auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-size:.9rem;font-weight:600;cursor:pointer}
 .ratio-chip.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.crop-row{display:flex;gap:8px;align-items:center}
+.crop-row .ratios{flex:1;margin:0}
+.btn-icon2{flex:0 0 auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:1.15rem;line-height:1;cursor:pointer}
 
 /* トリミング中のキャンバス */
 .preview.cropping{touch-action:none;cursor:crosshair}

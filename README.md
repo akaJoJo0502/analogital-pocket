@@ -17,4 +17,4 @@
 - 写真の向きは EXIF を反映（`createImageBitmap` の `imageOrientation`）。保存時に位置情報などの撮影メタデータは引き継がれません。
 - アイコンは `node tools/make-icons.js` で再生成できます（開発時のみ。アプリには同梱の PNG を使用）。
 
-レシピ3種類（Jostalgic／MESHITERO／JOCROS R）。色はユーザーの調整前後のペア写真から生成。明るさ調整・トリミング（自由＋比率固定 1:1/4:5/16:9）に対応。
+レシピ3種類（Jostalgic／MESHITERO／JOCROS R）。色はユーザーの調整前後のペア写真から生成。明るさ調整・トリミング（自由＋比率固定 1:1/4:5/16:9・縦横入替・傾き補正）に対応。

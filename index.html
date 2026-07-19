@@ -51,12 +51,20 @@
         </div>
       </div>
       <div id="cropControls" hidden>
-        <div id="ratios" class="ratios" role="group" aria-label="比率">
-          <button class="ratio-chip is-on" data-ratio="free" type="button">自由</button>
-          <button class="ratio-chip" data-ratio="1:1" type="button">1:1</button>
-          <button class="ratio-chip" data-ratio="4:5" type="button">4:5</button>
-          <button class="ratio-chip" data-ratio="16:9" type="button">16:9</button>
+        <div class="crop-row">
+          <div id="ratios" class="ratios" role="group" aria-label="比率">
+            <button class="ratio-chip is-on" data-ratio="free" type="button">自由</button>
+            <button class="ratio-chip" data-ratio="1:1" type="button">1:1</button>
+            <button class="ratio-chip" data-ratio="4:5" type="button">4:5</button>
+            <button class="ratio-chip" data-ratio="16:9" type="button">16:9</button>
+          </div>
+          <button id="swapOrient" class="btn-icon2" type="button" aria-label="縦横を入れ替え" title="縦横を入れ替え">⇅</button>
         </div>
+        <label class="slider-row">
+          <span class="slider-label">角度</span>
+          <input id="angle" type="range" min="-45" max="45" step="0.5" value="0" aria-label="角度">
+          <button id="angleReset" class="btn-tiny" type="button">0</button>
+        </label>
         <div class="row2">
           <button id="cropCancel" class="btn-sub" type="button">キャンセル</button>
           <button id="cropApply" class="btn btn-primary" type="button">適用</button>
