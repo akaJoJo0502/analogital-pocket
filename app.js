@@ -31,26 +31,18 @@ let sourceCanvas = null;   // 向き補正済み・フル解像度の元画像�
 let currentRecipe = null;  // null = 元の写真（レシピ未適用）
 
 /* ------------------------------------------------------------------
-   レシピ（色は「仮」。後日、本物の調整値に差し替える前提）
-   事前計算した対応表（LUT）で高速に色変換する
+   レシピ：ユーザーの「調整前→調整後」のペア写真から作った本物の色。
+   変換表のデータは recipes-data.js（window.RECIPE_DATA）に置き、
+   ここでは写真に当てはめる関数だけを持つ。
 ------------------------------------------------------------------ */
-function buildLUT(gamma, gain, lift, ceil) {
-  const lut = new Uint8ClampedArray(256);
-  for (let i = 0; i < 256; i++) {
-    let x = Math.pow(i / 255, gamma) * gain;   // 明るさカーブ＋色ごとの強さ
-    x = lift + x * (ceil - lift);              // 黒を少し持ち上げ・白を少し抑える（フィルムの褪色感）
-    lut[i] = Math.round(x * 255);
-  }
-  return lut;
-}
-// 色ごとの対応表を使うレシピ（暖色・青系）
+// 色ごとの対応表を使うレシピ（カラー系）
 function lutRecipe(rL, gL, bL) {
   return (img) => {
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) { d[i] = rL[d[i]]; d[i + 1] = gL[d[i + 1]]; d[i + 2] = bL[d[i + 2]]; }
   };
 }
-// 明るさ（輝度）だけ残して色を抜くレシピ（モノクロ）＋ごく淡い色味
+// 明るさ（輝度）だけ残して色を抜くレシピ（モノクロ）＋色味の調整
 function monoRecipe(toneL, tR, tG, tB) {
   return (img) => {
     const d = img.data;
@@ -62,14 +54,14 @@ function monoRecipe(toneL, tR, tG, tB) {
   };
 }
 
-const RECIPES = [
-  { id: 'warm', name: '暖色フィルム',
-    apply: lutRecipe(buildLUT(0.90, 1.03, 0.05, 0.98), buildLUT(1.00, 1.00, 0.04, 0.96), buildLUT(1.10, 0.98, 0.05, 0.94)) },
-  { id: 'cool', name: 'クールブルー',
-    apply: lutRecipe(buildLUT(1.10, 0.97, 0.04, 0.94), buildLUT(1.00, 1.01, 0.05, 0.97), buildLUT(0.88, 1.05, 0.08, 0.99)) },
-  { id: 'mono', name: 'モノクロ',
-    apply: monoRecipe(buildLUT(0.95, 1.00, 0.06, 0.96), 1.02, 1.00, 0.96) },
-];
+// recipes-data.js のデータからレシピ一覧を組み立てる
+const RECIPES = (window.RECIPE_DATA || []).map((d) => ({
+  id: d.id,
+  name: d.name,
+  apply: d.type === 'mono'
+    ? monoRecipe(d.tone, d.tint[0], d.tint[1], d.tint[2])
+    : lutRecipe(d.R, d.G, d.B),
+}));
 
 // ---- 画面切り替え ----
 function show(name) { for (const k in screens) screens[k].classList.toggle('is-active', k === name); }
