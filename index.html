@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3a2a1a">
+<title>Analogital Pocket</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 画面1：ホーム -->
+  <section id="home" class="screen is-active">
+    <div class="home-inner">
+      <div class="brand">
+        <img class="brand-mark" src="./icon-192.png" alt="" width="72" height="72">
+        <h1 class="brand-name">Analogital Pocket</h1>
+        <p class="brand-tag">写真を選んで、ワンタッチで色を変える。</p>
+      </div>
+      <button id="pickBtn" class="btn btn-primary">写真を選ぶ</button>
+      <p class="note">写真は端末の外に送られません。すべてこの画面の中だけで処理します。</p>
+    </div>
+  </section>
+
+  <!-- 画面2：編集 -->
+  <section id="editor" class="screen">
+    <header class="bar">
+      <button id="backBtn" class="btn-icon" aria-label="別の写真を選ぶ">‹ 戻る</button>
+      <span class="bar-title">編集</span>
+      <span class="bar-spacer"></span>
+    </header>
+    <div class="preview-wrap">
+      <canvas id="preview" class="preview"></canvas>
+      <div id="busy" class="busy" hidden>処理中…</div>
+    </div>
+    <div class="controls">
+      <button id="recipeBtn" class="btn btn-recipe" aria-pressed="false">レシピ：暖色フィルム</button>
+      <button id="saveBtn" class="btn btn-primary">保存する</button>
+      <p id="status" class="status" role="status"></p>
+    </div>
+  </section>
+
+</div>
+
+<input id="fileInput" type="file" accept="image/*" hidden>
+<script src="./app.js"></script>
+</body>
+</html>
