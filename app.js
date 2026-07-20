@@ -13,6 +13,29 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ---- ホーム画面に追加（Android / Chrome）----
+// beforeinstallprompt が使える端末ではワンタップの「追加」ボタンを出す。
+// 出ない場合も手動の追加手順を案内文で常に表示。インストール済み(standalone)なら全部隠す。
+(() => {
+  const hint = document.getElementById('installHint');
+  const btn = document.getElementById('installBtn');
+  if (!hint) return;
+  const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (!installed) hint.hidden = false;          // 未インストール時だけ案内を出す
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferred = e;
+    if (btn) btn.hidden = false;                // ワンタップ用ボタンを出す
+  });
+  if (btn) btn.addEventListener('click', async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    await deferred.userChoice;
+    deferred = null; btn.hidden = true;
+  });
+  window.addEventListener('appinstalled', () => { deferred = null; hint.hidden = true; });
+})();
+
 // ---- 要素 ----
 const screens = { home: document.getElementById('home'), editor: document.getElementById('editor') };
 const fileInput   = document.getElementById('fileInput');

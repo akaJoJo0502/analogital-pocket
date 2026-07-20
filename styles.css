@@ -22,6 +22,13 @@ body{
 .brand-tag{margin:0;color:var(--muted);font-size:.95rem}
 .note{color:var(--muted);font-size:.8rem;max-width:22em;line-height:1.6}
 
+/* ホーム画面に追加の案内 */
+.install-hint{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:2px}
+.install-hint[hidden]{display:none}
+.install-btn{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:12px 20px;font-size:1rem;font-weight:600;cursor:pointer}
+.install-btn:active{transform:translateY(1px)}
+.install-help{color:var(--muted);font-size:.76rem;max-width:24em;line-height:1.6;margin:0}
+
 /* ボタン共通 */
 .btn{appearance:none;border:0;border-radius:14px;padding:16px 22px;font-size:1.05rem;font-weight:600;cursor:pointer}
 .btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 6px 18px rgba(200,134,63,.35)}

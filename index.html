@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#3a2a1a">
+<meta name="robots" content="noindex, nofollow">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Analogital Pocket</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon-192.png">
@@ -23,6 +25,10 @@
       </div>
       <button id="pickBtn" class="btn btn-primary">写真を選ぶ</button>
       <p class="note">写真は端末の外に送られません。すべてこの画面の中だけで処理します。</p>
+      <div id="installHint" class="install-hint" hidden>
+        <button id="installBtn" class="install-btn" type="button" hidden>📲 ホーム画面に追加</button>
+        <p class="install-help">アプリのように毎回すぐ開くには、ホーム画面に追加できます。うまく出ないときは、ブラウザのメニュー（⋮）から「アプリをインストール」または「ホーム画面に追加」でもOKです。</p>
+      </div>
     </div>
   </section>
 

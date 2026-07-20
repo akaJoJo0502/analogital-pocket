@@ -1,6 +1,7 @@
 {
   "name": "Analogital Pocket",
   "short_name": "Analogital",
+  "id": "./",
   "description": "写真をワンタッチで暖色フィルム風に変えて保存する、端末内だけで動くアプリ。",
   "lang": "ja",
   "start_url": "./",
