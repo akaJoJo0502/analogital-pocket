@@ -21,6 +21,8 @@ const backBtn     = document.getElementById('backBtn');
 const recipesEl   = document.getElementById('recipes');
 const exposureEl  = document.getElementById('exposure');
 const expResetEl  = document.getElementById('expReset');
+const grainEl     = document.getElementById('grain');
+const grainResetEl = document.getElementById('grainReset');
 const cropBtn     = document.getElementById('cropBtn');
 const saveBtn     = document.getElementById('saveBtn');
 const normalControls = document.getElementById('normalControls');
@@ -41,6 +43,7 @@ const stageCache = document.createElement('canvas'); // crop中の回転済み�
 let originalCanvas = null;               // 向き補正済み・フル解像度の元画像
 let cropRect = { x: 0, y: 0, w: 0, h: 0 }; // ステージ（回転済みW0×H0枠）座標での切り抜き範囲
 let exposure = 0;                        // 明るさ（-100〜+100）
+let grain = 0;                           // グレイン（0〜100）
 let angle = 0;                           // 傾き（度・-45〜+45）
 let currentRecipe = null;
 
@@ -95,17 +98,25 @@ function updateChips() {
 
 // ---- 明るさ＋レシピをまとめて当てる ----
 function applyAdjustments(ctx, w, h) {
-  if (exposure === 0 && !currentRecipe) return;
+  if (exposure === 0 && !currentRecipe && grain === 0) return;
   const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
   if (exposure !== 0) {
     // 最大±0.5段。中央付近ほど効きが弱く＝微調整しやすい（べき1.5）
     const n = exposure / 100;
     const stops = 0.5 * Math.sign(n) * Math.pow(Math.abs(n), 1.5);
     const f = Math.pow(2, stops);
-    const d = img.data;
     for (let i = 0; i < d.length; i += 4) { d[i] *= f; d[i + 1] *= f; d[i + 2] *= f; }
   }
   if (currentRecipe) currentRecipe.apply(img);
+  if (grain !== 0) {
+    // モノクロの粒（明暗のノイズ）。三角分布で自然に。色ではなく明るさに乗せる。
+    const amp = (grain / 100) * 50;
+    for (let i = 0; i < d.length; i += 4) {
+      const g = (Math.random() + Math.random() - 1) * amp;
+      d[i] += g; d[i + 1] += g; d[i + 2] += g;
+    }
+  }
   ctx.putImageData(img, 0, 0);
 }
 
@@ -146,6 +157,7 @@ async function loadFile(file) {
     if (img.close) img.close();
     cropRect = { x: 0, y: 0, w: w, h: h };
     exposure = 0; exposureEl.value = 0;
+    grain = 0; grainEl.value = 0;
     angle = 0; angleEl.value = 0;
     currentRecipe = null;
     exitCropMode(true);
@@ -190,6 +202,14 @@ exposureEl.addEventListener('input', () => {
 });
 expResetEl.addEventListener('click', () => {
   exposure = 0; exposureEl.value = 0;
+  if (originalCanvas && !cropMode) renderPreview();
+});
+grainEl.addEventListener('input', () => {
+  if (!originalCanvas || cropMode) return;
+  grain = Number(grainEl.value); renderPreview();
+});
+grainResetEl.addEventListener('click', () => {
+  grain = 0; grainEl.value = 0;
   if (originalCanvas && !cropMode) renderPreview();
 });
 
