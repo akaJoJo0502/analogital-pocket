@@ -71,6 +71,72 @@ const RECIPES = (window.RECIPE_DATA || []).map((d) => ({
     : lutRecipe(d.R, d.G, d.B),
 }));
 
+// ---- 料理向けの仕上げ（MESHITERO専用）----
+// 色ごとの変換表(LUT)では出せない「鮮やかさ・明瞭度・シャープ」を後処理で軽く足す。
+// 数値はすべて控えめ。強すぎたらここを下げる（saturation:1.0=変化なし／clarity・sharpen:0=効果なし）。
+const FINISH = {
+  meshitero: { saturation: 1.12, clarity: 0.15, sharpen: 0.30 },
+};
+
+// 箱ぼかし：各画素をまわり半径rの平均に置き換える（明瞭度・シャープの「ぼかし版」を作るのに使う）。
+// 端は同じ画素を繰り返す扱い。合計を持ち回るので半径が大きくても速い。縦横に分けて2回かける。
+function boxBlur(src, w, h, r) {
+  const win = 2 * r + 1;
+  const tmp = new Float32Array(src.length);
+  const out = new Float32Array(src.length);
+  for (let y = 0; y < h; y++) {                 // 横方向
+    const off = y * w;
+    let sum = 0;
+    for (let k = -r; k <= r; k++) sum += src[off + Math.min(w - 1, Math.max(0, k))];
+    for (let x = 0; x < w; x++) {
+      tmp[off + x] = sum / win;
+      sum += src[off + Math.min(w - 1, x + r + 1)] - src[off + Math.max(0, x - r)];
+    }
+  }
+  for (let x = 0; x < w; x++) {                 // 縦方向
+    let sum = 0;
+    for (let k = -r; k <= r; k++) sum += tmp[Math.min(h - 1, Math.max(0, k)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = sum / win;
+      sum += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+    }
+  }
+  return out;
+}
+
+// 仕上げ本体。d=画素データ(RGBA)、w×h=サイズ、p=強さ設定。
+function applyFinish(d, w, h, p) {
+  // 1) 彩度：各画素で「その画素の明るさ(灰色)」との差を saturation 倍に広げる（明るさ自体は変えない）
+  const s = p.saturation || 1;
+  if (s !== 1) {
+    for (let i = 0; i < d.length; i += 4) {
+      const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      d[i] = L + (d[i] - L) * s;
+      d[i + 1] = L + (d[i + 1] - L) * s;
+      d[i + 2] = L + (d[i + 2] - L) * s;
+    }
+  }
+  // 2) 明瞭度＋シャープ：明るさ成分だけを強調（色ズレ・色ノイズを防ぐ）
+  const clarity = p.clarity || 0, sharpen = p.sharpen || 0;
+  if (clarity <= 0 && sharpen <= 0) return;
+  const n = w * h;
+  const Y = new Float32Array(n);                // 明るさ
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) Y[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  // 明瞭度＝広めのぼかし（画像サイズに比例＝プレビューと保存で見た目一致）／シャープ＝1画素の細部
+  const rBig = Math.max(3, Math.round(Math.min(w, h) * 0.02));
+  const blurBig = clarity > 0 ? boxBlur(Y, w, h, rBig) : null;
+  const blurSmall = sharpen > 0 ? boxBlur(Y, w, h, 1) : null;
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    let add = 0;
+    if (clarity > 0) {
+      const mid = 1 - Math.abs(Y[j] - 128) / 128; // 中間調ほど強く＝白飛び/黒つぶれ付近のフチ(ハロ)を抑える
+      add += clarity * mid * (Y[j] - blurBig[j]);
+    }
+    if (sharpen > 0) add += sharpen * (Y[j] - blurSmall[j]);
+    if (add) { d[i] += add; d[i + 1] += add; d[i + 2] += add; }
+  }
+}
+
 function show(name) { for (const k in screens) screens[k].classList.toggle('is-active', k === name); }
 
 // ---- レシピ選択ボタン ----
@@ -109,6 +175,7 @@ function applyAdjustments(ctx, w, h) {
     for (let i = 0; i < d.length; i += 4) { d[i] *= f; d[i + 1] *= f; d[i + 2] *= f; }
   }
   if (currentRecipe) currentRecipe.apply(img);
+  if (currentRecipe && FINISH[currentRecipe.id]) applyFinish(d, w, h, FINISH[currentRecipe.id]);
   if (grain !== 0) {
     // モノクロの粒（明暗のノイズ）。三角分布で自然に。色ではなく明るさに乗せる。
     const amp = (grain / 100) * 50;
