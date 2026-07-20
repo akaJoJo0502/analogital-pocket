@@ -73,7 +73,14 @@ const RECIPES = (window.RECIPE_DATA || []).map((d) => ({
 
 // ---- 料理向けの仕上げ（MESHITERO専用）----
 // 色ごとの変換表(LUT)では出せない「鮮やかさ・明瞭度・シャープ」を後処理で軽く足す。
-// 数値はすべて控えめ。強すぎたらここを下げる（saturation:1.0=変化なし／clarity・sharpen:0=効果なし）。
+//
+// ★強さを変えたいときは、下の3つの数値だけ変更すればOK（他の行は触らない）。
+//   saturation : 鮮やかさ。1.0=変化なし／大きいほど鮮やか。目安 1.0〜1.25（今は控えめの 1.12）
+//   clarity    : 明瞭度（立体感）。0=なし／大きいほど強い。目安 0〜0.30（今は 0.15）
+//   sharpen    : シャープ（輪郭のくっきり）。0=なし／大きいほど強い。目安 0〜0.60（今は 0.30）
+//   例）もっと鮮やかに→ saturation を 1.18 に／もっとくっきり→ sharpen を 0.45 に
+//   変更後の反映手順：service-worker.js のキャッシュ名 analogital-vN を +1 → push → アプリを開き直す
+//   （他レシピにも足したい場合は下に「id: { ... }」を追加。例 jostalgic: { saturation: 1.10, clarity: 0.10, sharpen: 0.20 }）
 const FINISH = {
   meshitero: { saturation: 1.12, clarity: 0.15, sharpen: 0.30 },
 };
