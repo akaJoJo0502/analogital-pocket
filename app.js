@@ -101,11 +101,12 @@ const RECIPES = (window.RECIPE_DATA || []).map((d) => ({
 //   saturation : 鮮やかさ。1.0=変化なし／大きいほど鮮やか。目安 1.0〜1.25（今は控えめの 1.12）
 //   clarity    : 明瞭度（立体感）。0=なし／大きいほど強い。目安 0〜0.30（今は 0.15）
 //   sharpen    : シャープ（輪郭のくっきり）。0=なし／大きいほど強い。目安 0〜0.60（今は 0.30）
-//   例）もっと鮮やかに→ saturation を 1.18 に／もっとくっきり→ sharpen を 0.45 に
+//   shadow     : シャドウの引き締め（暗部を深く＝コントラスト増し。ハイライトは変えない）。0=なし。目安 0〜0.13（今は 0.07）
+//   例）もっと鮮やかに→ saturation を 1.18 に／もっとくっきり→ sharpen を 0.45 に／暗部をもっと締める→ shadow を上げる
 //   変更後の反映手順：service-worker.js のキャッシュ名 analogital-vN を +1 → push → アプリを開き直す
 //   （他レシピにも足したい場合は下に「id: { ... }」を追加。例 jostalgic: { saturation: 1.10, clarity: 0.10, sharpen: 0.20 }）
 const FINISH = {
-  meshitero: { saturation: 1.12, clarity: 0.15, sharpen: 0.30 },
+  meshitero: { saturation: 1.12, clarity: 0.15, sharpen: 0.30, shadow: 0.07 },
 };
 
 // 箱ぼかし：各画素をまわり半径rの平均に置き換える（明瞭度・シャープの「ぼかし版」を作るのに使う）。
@@ -136,6 +137,24 @@ function boxBlur(src, w, h, r) {
 
 // 仕上げ本体。d=画素データ(RGBA)、w×h=サイズ、p=強さ設定。
 function applyFinish(d, w, h, p) {
+  // 0) シャドウ引き締め：ピボット(P)より暗い部分だけを深くする（ハイライトは不変）。
+  //    明るさYでスケールしてRGBを同率で縮小＝色相を保ったまま暗部だけ締める。放物線なので黒(0)と境目(P)は変化なし。
+  const shadow = p.shadow || 0;
+  if (shadow > 0) {
+    const P = 140, peak = Math.min(shadow * 255, P / 4); // 上限=P/4で階調反転を防止（単調性を保証）
+    const scaleForY = new Float32Array(256);
+    for (let y = 0; y < 256; y++) {
+      if (y === 0) { scaleForY[y] = 1; continue; }
+      let dip = 0;
+      if (y < P) { const t = y / P; dip = peak * 4 * t * (1 - t); }
+      scaleForY[y] = Math.max(0, (y - dip) / y);
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      const y = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0;
+      const sc = scaleForY[y];
+      if (sc !== 1) { d[i] *= sc; d[i + 1] *= sc; d[i + 2] *= sc; }
+    }
+  }
   // 1) 彩度：各画素で「その画素の明るさ(灰色)」との差を saturation 倍に広げる（明るさ自体は変えない）
   const s = p.saturation || 1;
   if (s !== 1) {
